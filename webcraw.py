@@ -3,27 +3,22 @@ import sys
 import bs4
 import requests
 from collections import defaultdict
+from xml.etree import ElementTree
 from xml.etree.ElementTree import *
+from xml.dom import minidom
+
 
 
 class Crawler():
+	#or search based on category "Chef & Categories.... Magazines"
 	DEFAULT_PAGE = "http://www.gourmet.com/search/query?query="
 	DOMAIN_PAGE = "http://www.gourmet.com"
 
 	def __init__(self):
 		pass
 
-	@staticmethod
-	def gourmet():
-		concentrate_tag_list = ['results', 'result']
-		class_compile = "info"
-		doc_tags = ['title', 'contributor' ,'category', 'date', 'keywords']
-		return concentrate_tag_list
 
-
-
-	STYLES = {"Gourmet" : gourmet.__func__()}
-
+           #this part is so crappy...
 	def search(self, search, article_list = []): 
 		base_url = Crawler.DOMAIN_PAGE if article_list else Crawler.DEFAULT_PAGE
 
@@ -45,8 +40,8 @@ class Crawler():
 				count += 1
 				continue
 			
-			article['date'] = res.find("div", {"class" : re.compile("date")})
-			article['category'] = res.find("h5", {"class" : True})
+			article['date'] = res.find("div", {"class" : re.compile("date")}).getText()
+			article['category'] = res.find("h5", {"class" : True}).getText().encode('utf-8')
 			article['contributor'] = res.find("div", {"class" : "contributor"})
 			try:
 				keywords = res.find("div", {"class" : "keywords"}).find_all("dd")
@@ -73,29 +68,58 @@ class Crawler():
 
 
 	def extract_content(self, url):
-		f = open('test.txt', 'w')
-		response = requests.get(url)
-		soup = bs4.BeautifulSoup(response.content)
-		paragraphs = soup.find("div", {"class" : "text"}).find_all("p")
-		articles = ''
-		for p in paragraphs:
-			parts = p.contents
-			#sentences = [part.string for part in parts]
-			sentences = [' '.join(part.string.split(' ')) for part in parts]
-			for s in sentences:
-				f.write(str(s.encode('utf-8')))
-			#print sentences
-		f.close()
+		url = Crawler.DOMAIN_PAGE + url
+		#print url
+		try:
+			response = requests.get(url)
+			soup = bs4.BeautifulSoup(response.content)
+			paragraphs = soup.find("div", {"class" : "text"}).find_all("p")
+		except:
+			print 'Enable open webpage or find contents'
+			return ' '
 
+		try:
+			sentences = []
+			for p in paragraphs:
+				contents = p.contents
+				sentence = [' '.join(part.string.split(' ')).encode('utf-8') if part.string else '' for part in contents]
+				sentences.append(sentence)
+			sentences = str([' '.join(sentence) for sentence in sentences])
+			#TODO: implement a filtering for the decode, unicode staff
+			#But now at least it can be written to the xml....
+			return sentences
+			f.close()
+		except IOError: 
+			"Exception"
+			return ' '
+
+	@staticmethod
+	def prettify(elem):
+		rough_string = tostring(elem, 'utf-8', method='xml')
+		reparsed = minidom.parseString(rough_string)
+		return reparsed.toprettyxml(indent="   ")
+
+	
+
+	#TODO: also change this part
 	def write_xml(self, articles, filename):
-		#for article in articles:
-
-		#print articles[0].keys()
-		#article is a wrapped 'object' which includes the article's attributes and url
-		#for article in articles:
-		article = articles[0]
-
-			
+		f = open(filename, 'w')
+		if not articles:
+			print 'No staff to write to file'
+			sys.exit(1)
+		xml = Element('Gourmet')
+		doc_attributes_list = articles[0].keys()
+		for article in articles:
+			doc = SubElement(xml, 'doc')
+			for attribute in doc_attributes_list:
+				node = SubElement(doc, attribute)
+				if attribute == 'url':
+					node.text = self.extract_content(article[attribute])
+				else:
+					node.text = article[attribute].decode('utf-8') if article[attribute] else ' '
+				print 
+		f.write(Crawler.prettify(xml).encode('utf-8'))
+		f.close()
 
 	
 
@@ -103,7 +127,10 @@ def main():
 	crawler = Crawler()
 	articles = crawler.search("Italy")
 	crawler.write_xml(articles, 'test.xml')
-	#crawler.extract_content('http://www.gourmet.com/food/gourmetlive/2012/103112/welcome-italian-2012')
+	#crawler.extract_content('http://www.gourmet.com/restaurants/2007/01/epi_colmans_italy')
+	#'http://www.gourmet.com/food/gourmetlive/2012/103112/welcome-italian-2012')
+
+
 	
 
 
